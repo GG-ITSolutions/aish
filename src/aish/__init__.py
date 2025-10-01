@@ -1,6 +1,6 @@
 import argparse
 from .aish import AIsh
-from .cli import InteractiveMode
+from .cli import CLI
 
 def main():
     parser = argparse.ArgumentParser()
@@ -21,5 +21,9 @@ def main():
         print(aish._build_context())
         exit()
 
-    interactive_mode = InteractiveMode(aish)
-    interactive_mode.run(args.message)
+    if args.message:
+        aish.process_user_message(args.message)
+        exit()
+
+    cli = CLI(aish)
+    cli.run(args.message)

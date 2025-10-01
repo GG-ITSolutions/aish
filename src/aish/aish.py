@@ -111,17 +111,19 @@ class AIsh:
             prompt = f"[bold on red] EXECUTE [/][bold on green] {command} [/]"
             user_consent = Prompt.ask(prompt, choices=["y", "n"], default="y")
             if user_consent == "n":
+                self.history.append(HumanMessage(content=f"User did not consent to execute command: {command}   "))
                 continue
             if user_consent == "y":
+                self.history.append(HumanMessage(content=f"User consented to execute command: {command}"))
                 with script_capture(command) as output:
-                    if output.strip():
-                        self.history.append(SystemMessage(content=output.strip()))
-                return prompt + user_consent + "\n" + output.strip()
+                    output = output.strip()
+                    if output:
+                        self.history.append(SystemMessage(content=f"<output>{output}</output>"));
 
 
     def _print_response(self, response: str):
-        response = re.sub(r"<execute>(.*?)</execute>", "", response)
-        response = re.sub(r"<think>(.*?)</think>", "", response)
+        response = re.sub(r"<execute>(.*?)</execute>", "", response, flags=re.DOTALL)
+        response = re.sub(r"<think>(.*?)</think>", "", response, flags=re.DOTALL)
         response = re.sub(r"<done>", "", response)
         response = re.sub(r"<end>", "", response)
         self.console.print(response.strip())
@@ -136,10 +138,7 @@ class AIsh:
 
             try:
                 self._print_response(response)
-                command_output = self._execute_commands(response)
-                if command_output != None:
-                    self.history.append(SystemMessage(content=command_output))
-                    continue
+                self._execute_commands(response)
             except Exception as e:
                 self.history.append(SystemMessage(content=f"System Error: {e}"))
                 continue
