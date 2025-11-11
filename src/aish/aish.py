@@ -10,10 +10,7 @@ from rich.console import Console
 from rich.prompt import Prompt
 from platformdirs import user_config_dir
 
-from .utils import script_capture
 from .providers import PROVIDERS
-
-load_dotenv()
 
 class AIsh:
     def __init__(self, model_name: str = None, provider_name: str = None, agent_name: str = None):
@@ -22,8 +19,8 @@ class AIsh:
 
         self.config_path = self._get_config_path()
         self.config = self._load_config()
-
-        self.system_overview = self._get_system_overview()
+        
+        load_dotenv(self.config_path / ".env")
 
         self.agent_name = agent_name or os.getenv("AISH_AGENT") or self.config["default_agent"]
         self.agent_prompt, self.agent_metadata = self._get_agent_prompt()
@@ -31,12 +28,26 @@ class AIsh:
         self.default_connection = self.config["connections"][self.agent_metadata.get("connection")] or next(iter(self.config["connections"].values()))
         self.model_name = model_name or self.agent_metadata.get("model") or os.getenv("AISH_MODEL") or self.default_connection['model']
         self.provider_name = provider_name or self.agent_metadata.get("provider") or os.getenv("AISH_PROVIDER") or self.default_connection['provider']
-
+        
+        self._setup_api_key()
+        
         self.llm = PROVIDERS[self.provider_name](model=self.model_name)
+    
+    def _setup_api_key(self):
+        api_key = self.default_connection.get("api_key")
+        
+        if api_key:
+            os.environ["OPENAI_API_KEY"] = api_key
+        elif not os.getenv("OPENAI_API_KEY"):
+            raise ValueError(
+                "No API key found! Either:\n"
+                f"  1. Add 'api_key' to {self.config_path / 'aish.json'}\n"
+                "  2. Set OPENAI_API_KEY environment variable\n"
+                f"  3. Create {self.config_path / '.env'} with OPENAI_API_KEY"
+            )
 
-    def _get_system_overview(self) -> str:
-        with open(self.config_path / "system_overview.md", "r", encoding="utf-8") as file:
-            return file.read()
+    def _load_instruction(self, filename: str) -> str:
+        return (self.config_path / "instructions" / filename).read_text()
 
     def _get_config_path(self) -> Path:
         # Development: Check for local config directory
@@ -86,12 +97,14 @@ class AIsh:
 
     def _build_request_body(self, history: list = []):
         system_messages = [
-            SystemMessage(content=self._build_context()),
+            SystemMessage(content=self._load_instruction("identity_primer.md")),
+            SystemMessage(content=self._load_instruction("behavior_instructions.md")),
+            SystemMessage(content=self._load_instruction("examples.md")),
             SystemMessage(content=self.agent_prompt),
-            SystemMessage(content=self.system_overview),
+            SystemMessage(content=self._build_context()),
         ]
 
-        divider = [SystemMessage(content="\n\n=========== Here starts the conversation ===========\n\n")]
+        divider = [SystemMessage(content="\n\n=========== Conversation ===========\n\n")]
 
         return system_messages + divider + history
 
@@ -111,14 +124,21 @@ class AIsh:
             prompt = f"[bold on red] EXECUTE [/][bold on green] {command} [/]"
             user_consent = Prompt.ask(prompt, choices=["y", "n"], default="y")
             if user_consent == "n":
-                self.history.append(HumanMessage(content=f"User did not consent to execute command: {command}   "))
+                self.history.append(HumanMessage(content=f"User did not consent to execute command: {command}"))
                 continue
             if user_consent == "y":
                 self.history.append(HumanMessage(content=f"User consented to execute command: {command}"))
-                with script_capture(command) as output:
-                    output = output.strip()
-                    if output:
-                        self.history.append(SystemMessage(content=f"<output>{output}</output>"));
+                result = subprocess.run(
+                    command,
+                    shell=True,
+                    capture_output=True,
+                    text=True,
+                    encoding='utf-8',
+                    errors='replace'
+                )
+                output = result.stdout.strip()
+                if output:
+                    self.history.append(SystemMessage(content=f"<output>{output}</output>"))
 
 
     def _print_response(self, response: str):

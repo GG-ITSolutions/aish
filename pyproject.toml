@@ -14,8 +14,6 @@ dependencies = [
     "python-dotenv",
     "rich",
     "platformdirs",
-    "prompt_toolkit",
-    "xonsh>=0.19.9",
 ]
 
 [tool.hatch.build.targets.wheel]

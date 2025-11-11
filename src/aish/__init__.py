@@ -1,10 +1,9 @@
 import argparse
 from .aish import AIsh
-from .cli import CLI
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("message", type=str, help="The message to send to the agent", nargs="?")
+    parser.add_argument("message", type=str, nargs="?", help="The message to send to the agent")
     parser.add_argument("-m", "--model", type=str, help="The model to use")
     parser.add_argument("-p", "--provider", type=str, help="The provider to use")
     parser.add_argument("-a", "--agent", type=str, help="The agent to use")
@@ -21,9 +20,7 @@ def main():
         print(aish._build_context())
         exit()
 
-    if args.message:
-        aish.process_user_message(args.message)
-        exit()
-
-    cli = CLI(aish)
-    cli.run(args.message)
+    if not args.message:
+        parser.error("message is required")
+    
+    aish.process_user_message(args.message)

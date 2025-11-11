@@ -3,7 +3,8 @@
   "connections": {
     "openrouter": {
       "provider": "openrouter",
-      "model": "x-ai/grok-code-fast-1"
+      "model": "anthropic/claude-sonnet-4.5",
+      "api_key": "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"
     }
   }
 }
