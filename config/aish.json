@@ -4,7 +4,7 @@
     "openrouter": {
       "provider": "openrouter",
       "model": "anthropic/claude-sonnet-4.5",
-      "api_key": "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"
+      "api_key": "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"
     }
   }
 }

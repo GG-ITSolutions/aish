@@ -46,6 +46,7 @@
             ];
             
             shellHook = ''
+              set +m
               export UV_PYTHON_PREFERENCE=only-system
               echo "AIsh Development Environment (xonsh)"
               echo ""

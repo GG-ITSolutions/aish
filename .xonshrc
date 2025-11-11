@@ -15,3 +15,19 @@ $XONSH_CAPTURE_ALWAYS = True
 
 # Custom project prompt (overrides global)
 $PROMPT = '{GREEN}aish{RESET} {BOLD_BLUE}{cwd}{RESET} {RED}@{RESET} '
+
+@events.on_transform_command
+def aish_question_mark_handler(cmd, **kw):
+    if cmd.strip().startswith('?'):
+        question = cmd.strip()[1:].strip()
+        return f'aish {repr(question)}'
+    return cmd
+
+@events.on_ptk_create
+def custom_keybindings(bindings, **kw):
+    @bindings.add('c-g')
+    def prefix_with_question_mark(event):
+        buffer = event.current_buffer
+        current_text = buffer.text
+        buffer.text = '? ' + current_text
+        buffer.cursor_position = len(buffer.text)
