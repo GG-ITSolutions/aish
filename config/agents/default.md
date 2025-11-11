@@ -1,6 +1,6 @@
 ---
 connection: "openrouter"
-context_modules: "system_info.py,zsh.py"
+context_modules: "system_info.py,xonsh.py"
 ---
 
 # Sample AI Assistant

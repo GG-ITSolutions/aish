@@ -42,13 +42,15 @@
               self.packages.${system}.default
               pkgs.uv
               pkgs.python313
+              pkgs.xonsh
             ];
             
             shellHook = ''
               export UV_PYTHON_PREFERENCE=only-system
-              echo "AIsh Development Environment"
+              echo "AIsh Development Environment (xonsh)"
               echo ""
-              echo "  Run: aish 'message'"
+              echo "Starting xonsh shell..."
+              exec xonsh --rc=.xonshrc
             '';
           };
         }
