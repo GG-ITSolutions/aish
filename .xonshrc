@@ -1,21 +1,17 @@
-# AIsh Development Environment xonsh configuration
-
 # Load user's global xonshrc FIRST if it exists
 import os
 user_xonshrc = os.path.expanduser('~/.xonshrc')
 if os.path.exists(user_xonshrc):
     source @(user_xonshrc)
 
-# NOW override with project-specific settings
 # Enable output storage for context module
 $XONSH_STORE_STDOUT = True
-
-# WICHTIG: Capture output von ALLEN commands (nicht nur explizit mit $())
 $XONSH_CAPTURE_ALWAYS = True
 
 # Custom project prompt (overrides global)
 $PROMPT = '{GREEN}aish{RESET} {BOLD_BLUE}{cwd}{RESET} {RED}@{RESET} '
 
+# Add aish question mark handler
 @events.on_transform_command
 def aish_question_mark_handler(cmd, **kw):
     if cmd.strip().startswith('?'):
@@ -23,6 +19,7 @@ def aish_question_mark_handler(cmd, **kw):
         return f'aish {repr(question)}'
     return cmd
 
+# Add custom keybinding for question mark
 @events.on_ptk_create
 def custom_keybindings(bindings, **kw):
     @bindings.add('c-g')
