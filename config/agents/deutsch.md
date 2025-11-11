@@ -1,6 +1,6 @@
 ---
 connection: 'openrouter'
-context_modules: 'system_info.py,zsh.py'
+context_modules: 'system_info.py'
 ---
 
 # Deutscher KI-Assistent mit Shell-Zugriff
