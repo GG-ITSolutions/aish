@@ -8,6 +8,7 @@ from langchain_core.messages import HumanMessage, SystemMessage, AIMessage, mess
 from dotenv import load_dotenv
 from rich.console import Console
 from rich.prompt import Prompt
+from rich.live import Live
 from platformdirs import user_config_dir
 
 from .providers import PROVIDERS
@@ -118,9 +119,9 @@ class AIsh:
 
     def _request(self, history: list):
         conversation = self._build_request_body(history)
-        response = self.llm.invoke(conversation)
-
-        return response.content
+        response_stream = self.llm.stream(conversation)
+        
+        return response_stream
 
     def _execute_commands(self, response: str):
         commands = re.findall(r"<execute>(.*?)</execute>", response)
@@ -149,12 +150,22 @@ class AIsh:
                     self.history.append(SystemMessage(content=f"<output>{output}</output>"))
 
 
-    def _print_response(self, response: str):
-        response = re.sub(r"<execute>(.*?)</execute>", "", response, flags=re.DOTALL)
-        response = re.sub(r"<think>(.*?)</think>", "", response, flags=re.DOTALL)
-        response = re.sub(r"<done>", "", response)
-        response = re.sub(r"<end>", "", response)
-        self.console.print(response.strip())
+    def _print_and_stream_response(self, response_stream):
+        full_response = ''
+        
+        with Live('', refresh_per_second=15, console=self.console) as live:
+            for chunk in response_stream:
+                full_response += chunk.content
+                
+                display_text = full_response
+                display_text = re.sub(r"<execute>(.*?)</execute>", "", display_text, flags=re.DOTALL)
+                display_text = re.sub(r"<think>(.*?)</think>", "", display_text, flags=re.DOTALL)
+                display_text = re.sub(r"<done>", "", display_text)
+                display_text = re.sub(r"<end>", "", display_text)
+                
+                live.update(display_text.strip())
+        
+        return full_response
 
     def _get_session_id(self) -> str:
         return str(os.getppid())
@@ -218,18 +229,19 @@ class AIsh:
 
         while True:
             with self.console.status('Thinking'):
-                response = self._request(self.history)
-                self.history.append(AIMessage(content=response))
-
-            self._save_session_history()
-
+                response_stream = self._request(self.history)
+            
             try:
-                self._print_response(response)
-                self._execute_commands(response)
+                full_response = self._print_and_stream_response(response_stream)
+                
+                self.history.append(AIMessage(content=full_response))
+                self._save_session_history()
+                
+                self._execute_commands(full_response)
             except Exception as e:
                 self.history.append(SystemMessage(content=f"System Error: {e}"))
                 self._save_session_history()
                 continue
         
-            if "<done>" in response:
+            if "<done>" in full_response:
                 return
