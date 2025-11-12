@@ -48,9 +48,6 @@
             shellHook = ''
               set +m
               export UV_PYTHON_PREFERENCE=only-system
-              echo "AIsh Development Environment (xonsh)"
-              echo ""
-              echo "Starting xonsh shell..."
               exec xonsh --rc=.xonshrc
             '';
           };

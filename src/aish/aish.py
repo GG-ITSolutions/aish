@@ -1,4 +1,3 @@
-import re
 import os
 import json
 import subprocess
@@ -7,11 +6,13 @@ import frontmatter
 from langchain_core.messages import HumanMessage, SystemMessage, AIMessage, messages_to_dict, messages_from_dict
 from dotenv import load_dotenv
 from rich.console import Console
-from rich.prompt import Prompt
 from rich.live import Live
 from platformdirs import user_config_dir
 
 from .providers import PROVIDERS
+from .stream_processor import StreamProcessor, StreamContext
+from .stream_handlers import ExecuteTagHandler, ThinkTagHandler, DoneTagHandler, EndTagHandler, ToolExecutedException
+
 
 class AIsh:
     def __init__(self, model_name: str = None, provider_name: str = None, agent_name: str = None, history_file: str = None):
@@ -123,47 +124,20 @@ class AIsh:
         
         return response_stream
 
-    def _execute_commands(self, response: str):
-        commands = re.findall(r"<execute>(.*?)</execute>", response)
-
-        if not commands:
-            return None
-
-        for command in commands:
-            prompt = f"[bold on red] EXECUTE [/][bold on green] {command} [/]"
-            user_consent = Prompt.ask(prompt, choices=["y", "n"], default="y")
-            if user_consent == "n":
-                self.history.append(HumanMessage(content=f"User did not consent to execute command: {command}"))
-                continue
-            if user_consent == "y":
-                self.history.append(HumanMessage(content=f"User consented to execute command: {command}"))
-                result = subprocess.run(
-                    command,
-                    shell=True,
-                    capture_output=True,
-                    text=True,
-                    encoding='utf-8',
-                    errors='replace'
-                )
-                output = result.stdout.strip()
-                if output:
-                    self.history.append(SystemMessage(content=f"<output>{output}</output>"))
-
-
-    def _print_and_stream_response(self, response_stream):
-        full_response = ''
+    def _setup_stream_processor(self):
+        processor = StreamProcessor()
+        processor.register_handler(ExecuteTagHandler())
+        processor.register_handler(ThinkTagHandler())
+        processor.register_handler(DoneTagHandler())
+        processor.register_handler(EndTagHandler())
+        return processor
+    
+    def _process_stream_with_tags(self, response_stream):
+        processor = self._setup_stream_processor()
         
         with Live('', refresh_per_second=15, console=self.console) as live:
-            for chunk in response_stream:
-                full_response += chunk.content
-                
-                display_text = full_response
-                display_text = re.sub(r"<execute>(.*?)</execute>", "", display_text, flags=re.DOTALL)
-                display_text = re.sub(r"<think>(.*?)</think>", "", display_text, flags=re.DOTALL)
-                display_text = re.sub(r"<done>", "", display_text)
-                display_text = re.sub(r"<end>", "", display_text)
-                
-                live.update(display_text.strip())
+            context = StreamContext(self.console, self.history, live)
+            full_response = processor.process_stream(response_stream, context)
         
         return full_response
 
@@ -228,16 +202,16 @@ class AIsh:
         self.history.append(HumanMessage(content=message))
 
         while True:
-            with self.console.status('Thinking'):
-                response_stream = self._request(self.history)
+            response_stream = self._request(self.history)
             
             try:
-                full_response = self._print_and_stream_response(response_stream)
+                full_response = self._process_stream_with_tags(response_stream)
                 
                 self.history.append(AIMessage(content=full_response))
                 self._save_session_history()
-                
-                self._execute_commands(full_response)
+            except ToolExecutedException:
+                self._save_session_history()
+                continue
             except Exception as e:
                 self.history.append(SystemMessage(content=f"System Error: {e}"))
                 self._save_session_history()
