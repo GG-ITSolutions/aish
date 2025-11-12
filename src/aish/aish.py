@@ -4,7 +4,7 @@ import json
 import subprocess
 from pathlib import Path
 import frontmatter
-from langchain_core.messages import HumanMessage, SystemMessage, AIMessage
+from langchain_core.messages import HumanMessage, SystemMessage, AIMessage, messages_to_dict, messages_from_dict
 from dotenv import load_dotenv
 from rich.console import Console
 from rich.prompt import Prompt
@@ -13,9 +13,8 @@ from platformdirs import user_config_dir
 from .providers import PROVIDERS
 
 class AIsh:
-    def __init__(self, model_name: str = None, provider_name: str = None, agent_name: str = None):
+    def __init__(self, model_name: str = None, provider_name: str = None, agent_name: str = None, history_file: str = None):
         self.console = Console(force_terminal=True)
-        self.history = []
 
         self.config_path = self._get_config_path()
         self.config = self._load_config()
@@ -32,7 +31,16 @@ class AIsh:
         self._setup_api_key()
         
         self.llm = PROVIDERS[self.provider_name](model=self.model_name)
-    
+
+        self.session_id = self._get_session_id()
+        self.session_file = self._get_session_file()
+        self.history_file = Path(history_file).expanduser() if history_file else None
+        
+        if self.history_file and self.history_file.exists():
+            self.history = self._load_history_from_file(self.history_file)
+        else:
+            self.history = self._load_session_history()
+
     def _setup_api_key(self):
         api_key = self.default_connection.get("api_key")
         
@@ -148,6 +156,63 @@ class AIsh:
         response = re.sub(r"<end>", "", response)
         self.console.print(response.strip())
 
+    def _get_session_id(self) -> str:
+        return str(os.getppid())
+
+    def _get_session_file(self) -> Path:
+        runtime_dir = os.getenv("XDG_RUNTIME_DIR")
+        if runtime_dir and Path(runtime_dir).exists():
+            return Path(runtime_dir) / f"aish-{self.session_id}.json"
+        return Path("/tmp") / f"aish-{self.session_id}.json"
+
+    def _load_session_history(self) -> list:
+        if self.session_file.exists():
+            try:
+                with open(self.session_file) as f:
+                    return messages_from_dict(json.load(f))
+            except (json.JSONDecodeError, FileNotFoundError):
+                return []
+        return []
+
+    def _load_history_from_file(self, filepath: Path) -> list:
+        try:
+            with open(filepath) as f:
+                return messages_from_dict(json.load(f))
+        except (json.JSONDecodeError, FileNotFoundError) as e:
+            self.console.print(f"[yellow]Warning: Could not load history from {filepath}: {e}[/yellow]")
+            return []
+
+    def _save_session_history(self):
+        serialized = messages_to_dict(self.history)
+        
+        try:
+            with open(self.session_file, "w") as f:
+                json.dump(serialized, f)
+        except Exception as e:
+            self.console.print(f"[yellow]Warning: Could not save session history to tmpfs: {e}[/yellow]")
+        
+        if self.history_file:
+            try:
+                self.history_file.parent.mkdir(parents=True, exist_ok=True)
+                with open(self.history_file, "w") as f:
+                    json.dump(serialized, f, indent=2)
+            except Exception as e:
+                self.console.print(f"[yellow]Warning: Could not save history to {self.history_file}: {e}[/yellow]")
+
+    def save_history(self, filepath: str):
+        filepath = Path(filepath).expanduser()
+        filepath.parent.mkdir(parents=True, exist_ok=True)
+        with open(filepath, "w") as f:
+            json.dump(messages_to_dict(self.history), f, indent=2)
+        self.console.print(f"[green]History saved to {filepath}[/green]")
+
+    def load_history(self, filepath: str) -> list:
+        filepath = Path(filepath).expanduser()
+        with open(filepath) as f:
+            history = messages_from_dict(json.load(f))
+        self.console.print(f"[green]History loaded from {filepath}[/green]")
+        return history
+
     def process_user_message(self, message: str):
         self.history.append(HumanMessage(content=message))
 
@@ -156,11 +221,14 @@ class AIsh:
                 response = self._request(self.history)
                 self.history.append(AIMessage(content=response))
 
+            self._save_session_history()
+
             try:
                 self._print_response(response)
                 self._execute_commands(response)
             except Exception as e:
                 self.history.append(SystemMessage(content=f"System Error: {e}"))
+                self._save_session_history()
                 continue
         
             if "<done>" in response:
