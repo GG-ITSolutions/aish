@@ -10,7 +10,8 @@ class ChatOpenRouter(ChatOpenAI):
         super().__init__(
             base_url=base_url,
             default_headers={
-                'X-Title': 'aish'
+                'X-Title': 'aish',
+                'HTTP-Referer': 'https://github.com/GG-ITSolutions/aish'
             },
             **kwargs
         )

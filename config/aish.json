@@ -3,8 +3,7 @@
   "connections": {
     "openrouter": {
       "provider": "openrouter",
-      "model": "anthropic/claude-sonnet-4.5",
-      "api_key": "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"
+      "model": "anthropic/claude-sonnet-4.5"
     }
   }
 }
